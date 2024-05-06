@@ -1,6 +1,5 @@
 import os
 import traceback
-os.system('pip install flask')
 import flask
 from threading import Thread
 import re
