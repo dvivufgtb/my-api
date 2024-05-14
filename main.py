@@ -7,8 +7,9 @@ import random
 import json
 import base64
 import datetime as dt
-import requests
+import requests,aiohttp
 import html
+from cryptography.fernet import Fernet
 from requests.structures import CaseInsensitiveDict
 from markdown import markdown
 app = flask.Flask('')
@@ -26,8 +27,8 @@ def guess_ext(mime):
  except: return ''
 def is_json(my_str):
     try:
-        json_object = json.loads(my_str)
-    except ValueError as e:
+        json.loads(my_str)
+    except ValueError:
         return False
     return True
 @app.route('/regex', methods=['POST'])
@@ -179,77 +180,105 @@ def isoformat(unix):
 
 
 @app.route('/discord-file', methods=['POST'])
-def discord_file():
+async def discord_file():
     payload = flask.request.get_json()
     auth = flask.request.headers.get('Authorization')
     channel_id = flask.request.args.get('channel')
-    try:
-     payload_json = payload['payload_json']
-    except:
-     payload_json = {}
-    attachment_url: str = payload['attachment_url'].split('?')[0]
+    payload_json = payload.get('payload_json', {})
+    attachment_url: str = payload['attachment_url']
+    att_url = attachment_url.split('?')[0]
     try:
       r = requests.get(attachment_url)
       r.raise_for_status()
-      manyak = os.urandom(8).hex()
       try:
         filename = payload['filename']
       except:
-        wtf = attachment_url.split('/')
+        wtf = att_url.split('/')
         wtf.reverse()
         filename = wtf[0]
-      with open('documents/'+manyak, 'wb') as f:
-        f.write(r.content)
-        f.close()
+      req_body = {
+        filename:r.content,
+        'payload_json':json.dumps(payload_json)}
+      #resp = requests.post(f'https://discord.com/api/v9/channels/{channel_id}/messages', headers={'authorization':auth}, data={'payload_json':json.dumps(payload_json)}, files={'file':(filename, r.content)})
+      async with aiohttp.ClientSession(headers={'authorization':auth}) as ses:
+        async with ses.post(f'https://discord.com/api/v9/channels/{channel_id}/messages', data=req_body) as res:
+          resp = res
+          _content = await resp.read()
 
-      resp = requests.post(f'https://discord.com/api/v9/channels/{channel_id}/messages', headers={'authorization':auth}, data={'payload_json':json.dumps(payload_json)}, files={'file':(filename, open('documents/'+manyak, 'rb'))})
-      os.remove('documents/'+manyak)
-      return resp.json(), resp.status_code
+      return flask.Response(_content, resp.status, content_type=resp.headers.get('content-type'))
     except:
       try:
        status_code = r.status_code
       except:
        status_code = 502
-      return html.escape(traceback.format_exc()), status_code
+      return flask.Response(traceback.format_exc(), status_code, content_type='text/plain')
 
 @app.route('/requests/<method>', methods=['POST'])
-def send_requests(method):
+async def send_requests(method):
    try:
-    get_json = flask.request.get_json()
+    get_json: dict = flask.request.get_json()
    except:
-    pass
+    get_json = {}
    try:
     url = flask.request.args.get('url')
-    try:
-     headers = CaseInsensitiveDict(get_json['headers'])
-    except:
-     headers = CaseInsensitiveDict()
-    try:
-     payload = get_json['data']
-    except:
-     payload = None
+    headers: dict = get_json.get('headers', {})
+    payload = get_json.get('data', None)
    except:
-     return traceback.format_exc(), 400
+     return flask.Response(traceback.format_exc(), 400, content_type='text/plain')
     
     
    
-   try:
-    response = requests.request(method, url, data=payload, headers=headers)
-    try:resp = response.json()
-    except:resp = response.text
-    resp_headers = dict(response.headers)
-    return {'response':resp, 'headers':resp_headers}, response.status_code
+   try: 
+    async with aiohttp.ClientSession(headers=headers) as session:
+      async with session.request(method, url, data=payload) as response:
+
+       try:resp = await response.json(encoding='utf-8')
+       except:resp = await response.text(encoding='utf-8', errors='ignore')
+       resp_headers = dict(response.headers)
+       return {'response':resp, 'headers':resp_headers}, response.status
    except:
     return f'''
 <div style="text-align: center; color: #345; padding-top: 10px;">
 <p><strong><span style="color: #ff6600;">{html.escape(traceback.format_exc())}</span></strong></p>
 </div>
 ''', 418
+   
+@app.route('/fernet/<option>', methods=['POST'])
+def fernet(option):
+ if option in ['generate','encrypt','decrypt']:
+  if option == 'generate':
+    return Fernet.generate_key()
+  
+
+  
+  
+  else:
+    data = flask.request.get_json()
+    try:
+      
+      fernet_key = data['fernet_key']
+
+      _fernet_ = Fernet(fernet_key)
+
+      if option == 'encrypt':
+        text = _fernet_.encrypt(data['data'].encode())
+      else:
+        text = _fernet_.decrypt(data['data'])
+      return flask.Response(text, content_type='text/plain; charset=utf-8')
+
+
+
+    except:
+      return flask.Response(traceback.format_exc(), 409, content_type='text/plain; charset=utf-8')
+
+ else:
+   
+    return "the options must be one of these options: generate, encrypt, decrypt", 400
       
 @app.route('/just-paste/<document>')
 def idk(document):
   r = requests.get(f'https://just-paste.it/documents/{document}')
-  try: return r.json()['text']
+  try: return flask.Response(r.json()['text'], content_type='text/plain; charset=utf-8')
   except: return r.text, r.status_code
 
 @app.route('/')
@@ -257,7 +286,7 @@ def home():
   return markdown(open('readme.md').read())
   
 def run():
-  app.run(host='0.0.0.0', port=8080)
+  app.run(host='0.0.0.0', port=random.randint(2024, 6969))
 
 
 def keep_alive():
@@ -267,4 +296,4 @@ def keep_alive():
     t.join()
 
 if __name__ == '__main__':
- keep_alive()
+ Thread(target=keep_alive).start()
