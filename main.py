@@ -286,7 +286,7 @@ def home():
   return markdown(open('readme.md').read())
   
 def run():
-  app.run(host='0.0.0.0', port=random.randint(2024, 6969))
+  app.run(host='0.0.0.0', port=9999)
 
 
 def keep_alive():
