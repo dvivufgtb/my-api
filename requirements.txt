@@ -2,3 +2,4 @@ flask[async]==3.0.2
 aiohttp==3.9.5
 requests==2.31
 markdown==3.6
+cryptography
