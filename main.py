@@ -12,7 +12,11 @@ import html
 from cryptography.fernet import Fernet
 from requests.structures import CaseInsensitiveDict
 from markdown import markdown
-app = flask.Flask('')
+
+
+from routes.json import json_route
+app = flask.Flask(__name__)
+app.register_blueprint(json_route)
 
 def guess_ext(mime):
  mime_to_ext = {
