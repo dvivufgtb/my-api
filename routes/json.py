@@ -1,4 +1,4 @@
-from flask import Blueprint, request
+from flask import Blueprint, request, Response
 import json
 # Create a Blueprint object
 json_route = Blueprint('json_route', __name__)
@@ -12,7 +12,7 @@ def dictXD(arg):
        _data_ = _json_.get('object')
        _key_ = _json_.get('key')
        _default_ = _json_.get('default')
-       return _data_.get(_key_, _default_)
+       return Response(json.dumps(_data_.get(_key_, _default_)), content_type='application/json')
     elif arg.lower() == 'update':
        _data_ = _json_.get('object')
        _value_ = _json_.get('value', {})
